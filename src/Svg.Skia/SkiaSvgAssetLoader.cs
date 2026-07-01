@@ -143,7 +143,7 @@ public partial class SkiaSvgAssetLoader : Model.ISvgAssetLoader, Model.ISvgImage
             var matchedShimTypeface = currentShimTypeface;
             if (runningFont.Typeface is { } currentTypeface &&
                 (ch <= ' ' || ch is '\u0085' or '\u00A0' || ch >= '\u0300' && IsNonAsciiTypefaceSpanGlue(text, i, ch)) &&
-                CanKeepGlueInCurrentTypeface(currentTypeface, text, i, ch))
+                CanKeepGlueInCurrentFont(runningFont, text, i, ch))
             {
                 // Keep marks and whitespace in the active span so bidi/shaping stays attached to
                 // the surrounding script run instead of splitting on font fallback for nonspacing
@@ -739,10 +739,10 @@ public partial class SkiaSvgAssetLoader : Model.ISvgAssetLoader, Model.ISvgImage
         return char.IsSurrogate(ch) ? char.ConvertToUtf32(text, index) : ch;
     }
 
-    private static bool CanKeepGlueInCurrentTypeface(SkiaSharp.SKTypeface typeface, string text, int index, char ch)
+    private static bool CanKeepGlueInCurrentFont(SkiaSharp.SKFont font, string text, int index, char ch)
     {
         return ch is not ' ' and not '\u00A0' ||
-               typeface.ContainsGlyph(GetCodepoint(text, index, ch));
+               font.ContainsGlyph(GetCodepoint(text, index, ch));
     }
 
     private static bool IsNonAsciiTypefaceSpanGlue(string text, int index, char ch)
@@ -775,16 +775,17 @@ public partial class SkiaSvgAssetLoader : Model.ISvgAssetLoader, Model.ISvgImage
         return category is UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark or UnicodeCategory.Format;
     }
 
-    private static bool CanRenderAllCodepoints(SkiaSharp.SKTypeface? typeface, IReadOnlyList<int> codepoints)
+    private bool CanRenderAllCodepoints(SkiaSharp.SKTypeface? typeface, IReadOnlyList<int> codepoints)
     {
         if (typeface is null || typeface.Handle == IntPtr.Zero)
         {
             return false;
         }
 
+        using var font = new SkiaSharp.SKFont(typeface);
         for (var i = 0; i < codepoints.Count; i++)
         {
-            if (!typeface.ContainsGlyph(codepoints[i]))
+            if (!font.ContainsGlyph(codepoints[i]))
             {
                 return false;
             }
@@ -872,7 +873,7 @@ public partial class SkiaSvgAssetLoader : Model.ISvgAssetLoader, Model.ISvgImage
             }
 
             var typeface = GetProviderTypeface(provider, familyKey, weight, width, slant);
-            if (typeface is { } && typeface.ContainsGlyph(codepoint))
+            if (ContainsGlyph(typeface, codepoint))
             {
                 matchedFamily = familyName;
                 return typeface;
@@ -880,5 +881,16 @@ public partial class SkiaSvgAssetLoader : Model.ISvgAssetLoader, Model.ISvgImage
         }
 
         return null;
+    }
+
+    private bool ContainsGlyph(SkiaSharp.SKTypeface? typeface, int codepoint)
+    {
+        if (typeface is null || typeface.Handle == IntPtr.Zero)
+        {
+            return false;
+        }
+
+        using var font = new SkiaSharp.SKFont(typeface);
+        return font.ContainsGlyph(codepoint);
     }
 }
